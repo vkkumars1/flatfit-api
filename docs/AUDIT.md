@@ -43,10 +43,8 @@ Legend: ✅ pass, ⚠ pass with note, ⏳ awaits live Supabase to prove end-to-e
 ## `npm audit`
 
 - Dev tree (full): 32 vulns (15 moderate / 14 high / 3 critical). Biggest offenders live under `newman` → `postman-request` → older `tough-cookie`/`uuid`; they never ship to production because `newman` is a dev dependency.
-- `npm audit --production`: **2 vulns (1 moderate, 1 high)**.
-  - `zod <4.6.6` (high, GHSA-mrhx-c7xc-m3w5): memory exhaustion on oversized collections.
-    - Mitigation already in place: global `100kb` body limit + explicit `.max()` on all list fields in validators. Exploit requires large crafted body which the limit rejects first.
-    - Follow-up: controlled bump to `zod@4.6.7` (breaking) is tracked as a separate change — not bundled with this release because it touches every validator file.
+- `npm audit --production`: **1 moderate** (zod high resolved — see below).
+  - `zod <4.6.6` (high, GHSA-mrhx-c7xc-m3w5): **RESOLVED** — upgraded to `zod@4.6.7`. Breaking surface was small (only canonical `z` / `ZodError` / `ZodType` usage across 13 files). One v4 breaking change hit `src/config/env.ts`: `.default('false')` after a `.transform` → `.default(false)` (post-transform type is boolean). `npx tsc --noEmit` clean, `npx vitest run` 24/24 pass. Mitigation (`100kb` body limit + `.max()` on all list fields) remains in place as defense-in-depth.
   - 1 moderate in a transitive helper: no runtime code path hits it; left for Dependabot auto-PR.
 
 ## Live-DB items (must run after Supabase credentials are pasted)

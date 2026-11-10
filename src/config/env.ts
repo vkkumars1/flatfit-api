@@ -23,7 +23,7 @@ const EnvSchema = z.object({
   DEMO_MODE: z
     .union([z.literal('true'), z.literal('false')])
     .transform((v) => v === 'true')
-    .default('false'),
+    .default(false),
   DEMO_PHONE: z.string().default('+919999999999'),
   DEMO_OTP: z.string().default('123456'),
 
