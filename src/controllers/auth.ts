@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma.js';
 import { env } from '../config/env.js';
 import ms from '../services/ms.js';
 import { Unauthorized } from '../lib/errors.js';
+import { getFirebaseAuth } from '../lib/firebase.js';
 
 const cookieOpts = () => ({
   httpOnly: true,
@@ -54,5 +55,25 @@ export async function postLogout(req: Request, res: Response, next: NextFunction
     if (rt) await logoutByToken(rt);
     res.clearCookie('rt', { path: '/auth' });
     res.status(204).send();
+  } catch (e) { next(e); }
+}
+
+export async function postFirebaseVerify(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { idToken } = req.body as { idToken: string };
+    const auth = getFirebaseAuth();
+    if (!auth) throw Unauthorized('Firebase not configured');
+    const decoded = await auth.verifyIdToken(idToken);
+    const phone = decoded.phone_number;
+    if (!phone) throw Unauthorized('Firebase token has no phone_number');
+    let user = await prisma.user.findUnique({ where: { phone } });
+    let isNewUser = false;
+    if (!user) {
+      isNewUser = true;
+      user = await prisma.user.create({ data: { phone, name: 'New user', gender: 'unspecified', dob: new Date('2000-01-01') } });
+    }
+    const { access, refresh } = await issueTokens(user.id);
+    res.cookie('rt', refresh, cookieOpts());
+    res.json({ accessToken: access, user: { id: user.id, name: user.name, role: user.role, plan: user.plan }, isNewUser });
   } catch (e) { next(e); }
 }
