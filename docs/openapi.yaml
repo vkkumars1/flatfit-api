@@ -1,0 +1,348 @@
+openapi: 3.0.3
+info:
+  title: FlatFit API
+  version: 1.0.0
+  description: >
+    REST + WebSocket API for FlatFit flatmate-matching platform.
+    Error shape: `{ error: { code, message, details? } }`.
+    Lists use cursor pagination: `{ items, nextCursor }`.
+servers:
+  - url: http://localhost:4000
+    description: Local
+  - url: https://flatfit-api.onrender.com
+    description: Production (Render)
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object }
+    AuthResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        isNewUser: { type: boolean }
+        user:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+            role: { type: string, enum: [USER, ADMIN] }
+            plan: { type: string, enum: [FREE, VERIFIED, BOOST] }
+    DiscoverItem:
+      type: object
+      properties:
+        userId: { type: string }
+        name: { type: string }
+        age: { type: integer }
+        city: { type: string }
+        photos: { type: array, items: { type: string } }
+        score: { type: number }
+        topReasons: { type: array, items: { type: string } }
+        lifestyleChips:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              same: { type: boolean }
+        budgetMin: { type: integer }
+        budgetMax: { type: integer }
+    Listing:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        city: { type: string }
+        locality: { type: string }
+        rent: { type: integer }
+        deposit: { type: integer }
+        bills: { type: integer }
+        description: { type: string, nullable: true }
+        photos:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              url: { type: string }
+        amenities: { type: array, items: { type: string } }
+        availableFrom: { type: string, format: date-time }
+        verified: { type: boolean }
+  responses:
+    Unauthorized:
+      description: Missing or invalid token
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Resource not found or inaccessible
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    TooMany:
+      description: Rate limited
+      headers: { Retry-After: { schema: { type: integer } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+security: [{ bearerAuth: [] }]
+paths:
+  /health:
+    get:
+      summary: Service health + DB check
+      security: []
+      responses:
+        '200':
+          description: OK (db may be false if DB unreachable)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  db: { type: boolean }
+  /auth/send-otp:
+    post:
+      summary: Send OTP (6 digits, hashed, 5-min TTL, 5 attempts max)
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties: { phone: { type: string, example: '+919999999999' } }
+      responses:
+        '200':
+          description: OTP dispatched
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  resendInSeconds: { type: integer, example: 30 }
+        '429': { $ref: '#/components/responses/TooMany' }
+  /auth/verify-otp:
+    post:
+      summary: Verify OTP, mint access+refresh tokens
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, otp]
+              properties:
+                phone: { type: string }
+                otp: { type: string, example: '123456' }
+      responses:
+        '200':
+          description: Authenticated; refresh cookie set
+          content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } }
+  /auth/refresh:
+    post:
+      summary: Rotate refresh + mint new access (reuse detection)
+      security: []
+      responses:
+        '200':
+          content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } }
+  /auth/logout:
+    post:
+      summary: Revoke refresh cookie
+      security: []
+      responses: { '204': { description: No Content } }
+  /me:
+    get:
+      summary: Full own profile + lifestyle + deal-breakers + verification
+      responses: { '200': { description: OK }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /me/profile:
+    put:
+      summary: Update profile fields
+      responses: { '200': { description: OK }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /me/lifestyle:
+    put:
+      summary: Update lifestyle
+      responses: { '200': { description: OK }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /me/deal-breakers:
+    put:
+      summary: Replace deal-breakers
+      responses: { '200': { description: OK }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /me/photos/upload-url:
+    post:
+      summary: Signed upload URL (jpeg/png/webp, max 5MB). Selfies go to private bucket.
+      responses: { '200': { description: OK }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /discover:
+    get:
+      summary: Candidate flatmates (hard-filtered + weighted score)
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: min, in: query, schema: { type: integer } }
+        - { name: max, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/DiscoverItem' } }
+                  nextCursor: { type: string, nullable: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /swipes:
+    post:
+      summary: Record swipe; mutual LIKE/SUPER creates Match in a transaction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toUserId, action]
+              properties:
+                toUserId: { type: string }
+                action: { type: string, enum: [LIKE, PASS, SUPER] }
+      responses: { '200': { description: OK }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /matches:
+    get:
+      summary: My matches (paginated)
+      parameters: [{ name: cursor, in: query, schema: { type: string } }]
+      responses: { '200': { description: OK }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /matches/{id}/compatibility:
+    get:
+      summary: Full score breakdown + reasons
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/NotFound' } }
+  /matches/{id}/messages:
+    get:
+      summary: Paginated messages
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/NotFound' } }
+    post:
+      summary: Send message (sanitized, 1000-char cap, 30/min rate limit)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties: { text: { type: string, maxLength: 1000 } }
+      responses:
+        '200': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooMany' }
+  /matches/{id}/agreement:
+    get:
+      summary: Fetch agreement
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+    post:
+      summary: Upsert agreement (editing after accept resets both)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+  /agreements/{id}/accept:
+    put:
+      summary: Accept agreement as the current user
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+  /listings:
+    get:
+      summary: Browse listings (public)
+      security: []
+      parameters:
+        - { name: city, in: query, schema: { type: string } }
+        - { name: min, in: query, schema: { type: integer } }
+        - { name: max, in: query, schema: { type: integer } }
+        - { name: verified, in: query, schema: { type: boolean } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Listing' } }
+                  nextCursor: { type: string, nullable: true }
+    post:
+      summary: Create listing (auth)
+      responses: { '201': { description: Created }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /listings/{id}:
+    get:
+      summary: Listing detail (public)
+      security: []
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/NotFound' } }
+    put:
+      summary: Update (owner only)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK }, '403': { description: Not owner } }
+    delete:
+      summary: Delete (owner only)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '204': { description: No Content } }
+  /reports:
+    post:
+      summary: Report a user
+      responses: { '201': { description: Created } }
+  /blocks:
+    get:
+      summary: List my blocks
+      responses: { '200': { description: OK } }
+    post:
+      summary: Block a user (excluded from discover/matches/chat both directions)
+      responses: { '201': { description: Created } }
+  /blocks/{userId}:
+    delete:
+      summary: Unblock
+      parameters: [{ name: userId, in: path, required: true, schema: { type: string } }]
+      responses: { '204': { description: No Content } }
+  /verify/selfie:
+    post:
+      summary: Submit selfie path to private bucket (status=PENDING)
+      responses: { '202': { description: Pending review } }
+  /payments/order:
+    post:
+      summary: Create Razorpay order (or mock fake when PAYMENTS_MODE=mock)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan]
+              properties: { plan: { type: string, enum: [VERIFIED, BOOST] } }
+      responses: { '200': { description: OK } }
+  /payments/webhook:
+    post:
+      summary: Razorpay webhook (raw body; HMAC verified; idempotent plan upgrade)
+      security: []
+      responses: { '200': { description: Accepted } }
+  /payments/mock-confirm:
+    post:
+      summary: Dev-only — DEMO_MODE forces plan upgrade without gateway
+      responses: { '200': { description: OK } }
+  /admin/verifications:
+    get:
+      summary: Pending selfie verifications with short-lived signed URLs (admin)
+      responses: { '200': { description: OK }, '403': { description: Forbidden } }
+  /admin/verifications/{id}:
+    put:
+      summary: Approve or reject verification (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties: { status: { type: string, enum: [approved, rejected] } }
+      responses: { '200': { description: OK } }

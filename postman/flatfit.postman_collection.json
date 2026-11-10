@@ -1,0 +1,62 @@
+{
+  "info": { "name": "FlatFit", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000" },
+    { "key": "accessToken", "value": "" },
+    { "key": "matchId", "value": "" }
+  ],
+  "item": [
+    { "name": "Health",
+      "request": { "method": "GET", "url": "{{baseUrl}}/health" },
+      "event": [ { "listen": "test", "script": { "exec": ["pm.test('200', ()=>pm.response.to.have.status(200));"] } } ]
+    },
+    { "name": "Auth: send-otp",
+      "request": { "method": "POST", "url": "{{baseUrl}}/auth/send-otp",
+        "header":[{"key":"Content-Type","value":"application/json"}],
+        "body": { "mode": "raw", "raw": "{\"phone\":\"+919999999999\"}" } },
+      "event": [ { "listen": "test", "script": { "exec": ["pm.test('200', ()=>pm.response.to.have.status(200));"] } } ]
+    },
+    { "name": "Auth: verify-otp",
+      "request": { "method": "POST", "url": "{{baseUrl}}/auth/verify-otp",
+        "header":[{"key":"Content-Type","value":"application/json"}],
+        "body": { "mode": "raw", "raw": "{\"phone\":\"+919999999999\",\"otp\":\"123456\"}" } },
+      "event": [ { "listen": "test", "script": { "exec": [
+        "pm.test('200', ()=>pm.response.to.have.status(200));",
+        "pm.collectionVariables.set('accessToken', pm.response.json().accessToken);"
+      ] } } ]
+    },
+    { "name": "Me",
+      "request": { "method": "GET", "url": "{{baseUrl}}/me",
+        "header":[{"key":"Authorization","value":"Bearer {{accessToken}}"}] },
+      "event": [ { "listen": "test", "script": { "exec": ["pm.test('200', ()=>pm.response.to.have.status(200));"] } } ]
+    },
+    { "name": "Discover",
+      "request": { "method": "GET", "url": "{{baseUrl}}/discover",
+        "header":[{"key":"Authorization","value":"Bearer {{accessToken}}"}] },
+      "event": [ { "listen": "test", "script": { "exec": ["pm.test('200', ()=>pm.response.to.have.status(200));"] } } ]
+    },
+    { "name": "Matches",
+      "request": { "method": "GET", "url": "{{baseUrl}}/matches",
+        "header":[{"key":"Authorization","value":"Bearer {{accessToken}}"}] },
+      "event": [ { "listen": "test", "script": { "exec": [
+        "pm.test('200', ()=>pm.response.to.have.status(200));",
+        "const items = pm.response.json().items; if (items && items[0]) pm.collectionVariables.set('matchId', items[0].matchId);"
+      ] } } ]
+    },
+    { "name": "Listings",
+      "request": { "method": "GET", "url": "{{baseUrl}}/listings" },
+      "event": [ { "listen": "test", "script": { "exec": ["pm.test('200', ()=>pm.response.to.have.status(200));"] } } ]
+    },
+    { "name": "Blocks list",
+      "request": { "method": "GET", "url": "{{baseUrl}}/blocks",
+        "header":[{"key":"Authorization","value":"Bearer {{accessToken}}"}] },
+      "event": [ { "listen": "test", "script": { "exec": ["pm.test('200', ()=>pm.response.to.have.status(200));"] } } ]
+    },
+    { "name": "Payments: order",
+      "request": { "method": "POST", "url": "{{baseUrl}}/payments/order",
+        "header":[{"key":"Authorization","value":"Bearer {{accessToken}}"},{"key":"Content-Type","value":"application/json"}],
+        "body": { "mode": "raw", "raw": "{\"plan\":\"VERIFIED\"}" } },
+      "event": [ { "listen": "test", "script": { "exec": ["pm.test('200', ()=>pm.response.to.have.status(200));"] } } ]
+    }
+  ]
+}

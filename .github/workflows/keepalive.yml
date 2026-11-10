@@ -1,0 +1,14 @@
+name: keepalive
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: hit health
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.BACKEND_URL }}/health")
+          echo "status $code"
+          if [ "$code" != "200" ]; then exit 1; fi

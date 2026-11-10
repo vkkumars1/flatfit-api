@@ -1,0 +1,277 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Plan {
+  FREE
+  VERIFIED
+  BOOST
+}
+
+enum Mode {
+  HAS_FLAT
+  NEEDS_FLAT
+}
+
+enum SwipeAction {
+  LIKE
+  PASS
+  SUPER
+}
+
+enum VerificationType {
+  PHONE
+  EMAIL
+  SELFIE
+}
+
+enum VerificationStatus {
+  NONE
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PaymentStatus {
+  CREATED
+  PAID
+  FAILED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  email     String?  @unique
+  name      String
+  gender    String?
+  dob       DateTime?
+  role      Role     @default(USER)
+  plan      Plan     @default(FREE)
+  createdAt DateTime @default(now())
+
+  profile       Profile?
+  lifestyle     Lifestyle?
+  dealBreakers  DealBreaker[]
+  listings      Listing[]
+  swipesFrom    Swipe[]  @relation("SwipeFrom")
+  swipesTo      Swipe[]  @relation("SwipeTo")
+  matchesA      Match[]  @relation("MatchA")
+  matchesB      Match[]  @relation("MatchB")
+  messages      Message[]
+  verifications Verification[] @relation("VerificationUser")
+  reviewed      Verification[] @relation("VerificationReviewer")
+  reportsMade   Report[] @relation("ReportReporter")
+  reportsAgainst Report[] @relation("ReportTarget")
+  blocksMade    Block[]  @relation("BlockBlocker")
+  blocksAgainst Block[]  @relation("BlockBlocked")
+  payments      Payment[]
+  refreshTokens RefreshToken[]
+}
+
+model Profile {
+  userId       String   @id
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio          String?
+  city         String?
+  budgetMin    Int?
+  budgetMax    Int?
+  moveInDate   DateTime?
+  occupation   String?
+  mode         Mode?
+  photos       String[] @default([])
+
+  @@index([city])
+}
+
+model Lifestyle {
+  userId       String   @id
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sleepTime    Int
+  wakeTime     Int
+  cleanliness  Int
+  smoking      Boolean  @default(false)
+  drinking     Boolean  @default(false)
+  pets         Boolean  @default(false)
+  diet         String?
+  guestsLevel  Int      @default(3)
+  noiseLevel   Int      @default(3)
+  cooking      Boolean  @default(false)
+}
+
+model DealBreaker {
+  id       String  @id @default(cuid())
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key      String
+  value    String
+
+  @@unique([userId, key])
+}
+
+model Listing {
+  id            String   @id @default(cuid())
+  ownerId       String
+  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title         String
+  city          String
+  locality      String
+  rent          Int
+  deposit       Int      @default(0)
+  bills         Int      @default(0)
+  description   String?
+  photos        String[] @default([])
+  amenities     String[] @default([])
+  availableFrom DateTime
+  verified      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([city, rent])
+}
+
+model Swipe {
+  id        String      @id @default(cuid())
+  fromUser  String
+  toUser    String
+  action    SwipeAction
+  createdAt DateTime    @default(now())
+
+  from      User        @relation("SwipeFrom", fields: [fromUser], references: [id], onDelete: Cascade)
+  to        User        @relation("SwipeTo", fields: [toUser], references: [id], onDelete: Cascade)
+
+  @@unique([fromUser, toUser])
+  @@index([toUser])
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  userA     String
+  userB     String
+  score     Int
+  createdAt DateTime @default(now())
+
+  aUser     User     @relation("MatchA", fields: [userA], references: [id], onDelete: Cascade)
+  bUser     User     @relation("MatchB", fields: [userB], references: [id], onDelete: Cascade)
+  messages  Message[]
+  agreement Agreement?
+
+  @@unique([userA, userB])
+  @@index([userA, userB])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  matchId   String
+  senderId  String
+  text      String
+  createdAt DateTime @default(now())
+  readAt    DateTime?
+
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, createdAt])
+}
+
+model Verification {
+  id         String             @id @default(cuid())
+  userId     String
+  type       VerificationType
+  status     VerificationStatus @default(NONE)
+  path       String?
+  reviewedBy String?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  user       User               @relation("VerificationUser", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer   User?              @relation("VerificationReviewer", fields: [reviewedBy], references: [id])
+
+  @@unique([userId, type])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  reporterId String
+  targetId   String
+  reason     String
+  details    String?
+  createdAt  DateTime @default(now())
+
+  reporter   User     @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  target     User     @relation("ReportTarget", fields: [targetId], references: [id], onDelete: Cascade)
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker   User     @relation("BlockBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlockBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+model Agreement {
+  id          String   @id @default(cuid())
+  matchId     String   @unique
+  rules       Json
+  acceptedByA Boolean  @default(false)
+  acceptedByB Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  userId            String
+  plan              Plan
+  amount            Int
+  status            PaymentStatus @default(CREATED)
+  razorpayOrderId   String        @unique
+  razorpayPaymentId String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  phone     String
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([phone, createdAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  family    String?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
