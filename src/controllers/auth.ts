@@ -10,7 +10,7 @@ import { getFirebaseAuth } from '../lib/firebase.js';
 const cookieOpts = () => ({
   httpOnly: true,
   secure: env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
+  sameSite: (env.NODE_ENV === 'production' ? 'none' : 'lax') as 'none' | 'lax',
   path: '/auth',
   maxAge: ms(env.REFRESH_TTL),
 });
