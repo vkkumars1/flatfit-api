@@ -70,12 +70,24 @@ export async function postFirebaseVerify(req: Request, res: Response, next: Next
       throw Unauthorized('Invalid Firebase token');
     }
     const phone = decoded.phone_number;
-    if (!phone) throw Unauthorized('Firebase token has no phone_number');
-    let user = await prisma.user.findUnique({ where: { phone } });
+    const email = decoded.email;
+    const firebaseUid = decoded.uid;
+    let identityKey: string;
+    let seedName = (decoded.name as string | undefined) ?? 'New user';
+    if (phone) {
+      identityKey = phone;
+    } else if (email && firebaseUid) {
+      identityKey = `google:${firebaseUid}`;
+    } else {
+      throw Unauthorized('Firebase token has no phone or email');
+    }
+    let user = await prisma.user.findUnique({ where: { phone: identityKey } });
     let isNewUser = false;
     if (!user) {
       isNewUser = true;
-      user = await prisma.user.create({ data: { phone, name: 'New user', gender: 'unspecified', dob: new Date('2000-01-01') } });
+      user = await prisma.user.create({ data: { phone: identityKey, email: email ?? null, name: seedName, gender: 'unspecified', dob: new Date('2000-01-01') } });
+    } else if (email && !user.email) {
+      user = await prisma.user.update({ where: { id: user.id }, data: { email } });
     }
     const { access, refresh } = await issueTokens(user.id);
     res.cookie('rt', refresh, cookieOpts());
