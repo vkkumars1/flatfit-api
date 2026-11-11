@@ -4,8 +4,9 @@ import { issueTokens, rotateRefresh, logoutByToken } from '../services/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { env } from '../config/env.js';
 import ms from '../services/ms.js';
-import { Unauthorized } from '../lib/errors.js';
+import { Unauthorized, BadRequest } from '../lib/errors.js';
 import { getFirebaseAuth } from '../lib/firebase.js';
+import bcrypt from 'bcryptjs';
 
 const cookieOpts = () => ({
   httpOnly: true,
@@ -92,5 +93,44 @@ export async function postFirebaseVerify(req: Request, res: Response, next: Next
     const { access, refresh } = await issueTokens(user.id);
     res.cookie('rt', refresh, cookieOpts());
     res.json({ accessToken: access, user: { id: user.id, name: user.name, role: user.role, plan: user.plan }, isNewUser });
+  } catch (e) { next(e); }
+}
+
+// why: pure-DB email+password signup, no Firebase dep, issues same JWT access + refresh cookie.
+export async function postEmailSignup(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { email, password, name } = req.body as { email: string; password: string; name?: string };
+    const normEmail = email.toLowerCase().trim();
+    const existing = await prisma.user.findUnique({ where: { email: normEmail } });
+    if (existing) throw BadRequest('Email already registered — sign in instead');
+    const passwordHash = await bcrypt.hash(password, 12);
+    const user = await prisma.user.create({
+      data: {
+        phone: `email:${normEmail}`,
+        email: normEmail,
+        password: passwordHash,
+        name: (name && name.trim()) || 'New user',
+        gender: 'unspecified',
+        dob: new Date('2000-01-01'),
+      },
+    });
+    const { access, refresh } = await issueTokens(user.id);
+    res.cookie('rt', refresh, cookieOpts());
+    res.json({ accessToken: access, user: { id: user.id, name: user.name, role: user.role, plan: user.plan }, isNewUser: true });
+  } catch (e) { next(e); }
+}
+
+// why: pure-DB email+password signin, bcrypt timingSafe compare against stored hash.
+export async function postEmailSignin(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { email, password } = req.body as { email: string; password: string };
+    const normEmail = email.toLowerCase().trim();
+    const user = await prisma.user.findUnique({ where: { email: normEmail } });
+    if (!user || !user.password) throw Unauthorized('Invalid email or password');
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) throw Unauthorized('Invalid email or password');
+    const { access, refresh } = await issueTokens(user.id);
+    res.cookie('rt', refresh, cookieOpts());
+    res.json({ accessToken: access, user: { id: user.id, name: user.name, role: user.role, plan: user.plan }, isNewUser: false });
   } catch (e) { next(e); }
 }

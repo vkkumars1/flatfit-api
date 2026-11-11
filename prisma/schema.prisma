@@ -53,6 +53,7 @@ model User {
   id        String   @id @default(cuid())
   phone     String   @unique
   email     String?  @unique
+  password  String?
   name      String
   gender    String?
   dob       DateTime?
