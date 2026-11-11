@@ -63,7 +63,12 @@ export async function postFirebaseVerify(req: Request, res: Response, next: Next
     const { idToken } = req.body as { idToken: string };
     const auth = getFirebaseAuth();
     if (!auth) throw Unauthorized('Firebase not configured');
-    const decoded = await auth.verifyIdToken(idToken);
+    let decoded;
+    try {
+      decoded = await auth.verifyIdToken(idToken);
+    } catch {
+      throw Unauthorized('Invalid Firebase token');
+    }
     const phone = decoded.phone_number;
     if (!phone) throw Unauthorized('Firebase token has no phone_number');
     let user = await prisma.user.findUnique({ where: { phone } });
