@@ -12,12 +12,47 @@ const LOCALITIES: Record<string, string[]> = {
   Pune: ['Koregaon Park','Baner','Viman Nagar','Kothrud','Aundh'],
 };
 
-// why: deterministic pseudo-random so seed is idempotent across runs
+const ROOM_PHOTOS = [
+  'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80',
+  'https://images.unsplash.com/photo-1540518614846-7eded433c457?w=800&q=80',
+  'https://images.unsplash.com/photo-1631679706909-1844bbd07221?w=800&q=80',
+  'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=800&q=80',
+  'https://images.unsplash.com/photo-1554995207-c18c203602cb?w=800&q=80',
+  'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80',
+  'https://images.unsplash.com/photo-1536376072261-38c75010e6c9?w=800&q=80',
+  'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=800&q=80',
+  'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?w=800&q=80',
+  'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80',
+  'https://images.unsplash.com/photo-1560448204-603b3fc33ddc?w=800&q=80',
+  'https://images.unsplash.com/photo-1605114058420-02be852b9636?w=800&q=80',
+  'https://images.unsplash.com/photo-1484154218962-a197022b5858?w=800&q=80',
+  'https://images.unsplash.com/photo-1631889993959-41b4e9c6e3c5?w=800&q=80',
+  'https://images.unsplash.com/photo-1600121848594-d8644e57abab?w=800&q=80',
+];
+
 let seedRng = 1;
 function rng() { seedRng = (seedRng * 1664525 + 1013904223) % 2 ** 32; return seedRng / 2 ** 32; }
 function pick<T>(arr: T[]): T { return arr[Math.floor(rng() * arr.length)]!; }
 function rand(a: number, b: number): number { return a + Math.floor(rng() * (b - a + 1)); }
 function iso(y: number, m: number, d: number): Date { return new Date(Date.UTC(y, m - 1, d)); }
+
+function portraitUrls(gender: string, seed: number, count = 3): string[] {
+  const folder = gender === 'female' ? 'women' : gender === 'male' ? 'men' : (seed % 2 === 0 ? 'women' : 'men');
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const idx = (seed * 7 + i * 11) % 99;
+    out.push(`https://randomuser.me/api/portraits/${folder}/${idx}.jpg`);
+  }
+  return out;
+}
+
+function roomPhotos(seed: number, count = 2): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push(ROOM_PHOTOS[(seed + i) % ROOM_PHOTOS.length]!);
+  }
+  return out;
+}
 
 async function upsertUser(phone: string, patch: any = {}) {
   const name = patch.name ?? `${pick(FIRST)} ${pick(LAST)}`;
@@ -32,13 +67,12 @@ async function upsertUser(phone: string, patch: any = {}) {
   });
 }
 
-async function profile(userId: string, city: string, mode: Mode) {
-  const localities = LOCALITIES[city] ?? [];
+async function profile(userId: string, gender: string, city: string, mode: Mode, seed: number) {
   const bmin = rand(10, 18) * 1000;
   const bmax = bmin + rand(4, 12) * 1000;
   return prisma.profile.upsert({
     where: { userId },
-    update: {},
+    update: { photos: portraitUrls(gender, seed) },
     create: {
       userId,
       bio: `Hi, I'm looking for a clean, respectful flatmate in ${city}. I enjoy ${pick(['books','music','running','coding','cooking','hiking'])} and keep common areas tidy.`,
@@ -48,7 +82,7 @@ async function profile(userId: string, city: string, mode: Mode) {
       moveInDate: iso(2026, 12, rand(1, 28)),
       occupation: pick(OCCUPATIONS),
       mode,
-      photos: [`https://i.pravatar.cc/400?u=${userId}`],
+      photos: portraitUrls(gender, seed),
     },
   });
 }
@@ -73,7 +107,7 @@ async function lifestyle(userId: string) {
   });
 }
 
-async function listing(ownerId: string, city: string) {
+async function listing(ownerId: string, city: string, seed: number) {
   const loc = pick(LOCALITIES[city] ?? ['Center']);
   const rent = rand(14, 32) * 1000;
   return prisma.listing.create({
@@ -86,7 +120,7 @@ async function listing(ownerId: string, city: string) {
       deposit: rent * 2,
       bills: rand(1500, 3500),
       description: `A well-maintained room in a ${rand(2, 4)}BHK flat with existing flatmates. Metro, groceries, and cafes within 10 min walk.`,
-      photos: [`https://picsum.photos/seed/${randomSeed()}/800/600`, `https://picsum.photos/seed/${randomSeed()}/800/600`],
+      photos: roomPhotos(seed),
       amenities: pick([['Wifi','AC','Washing machine'],['Wifi','Parking','Gym'],['Wifi','Balcony','AC','Pet-friendly']]),
       availableFrom: iso(2026, 12, rand(1, 28)),
       verified: rng() > 0.3,
@@ -99,51 +133,49 @@ function randomSeed() { return Math.floor(rng() * 1e9).toString(36); }
 async function main() {
   console.log('🌱 Seeding...');
 
-  // why: admin account for /admin routes
   const admin = await upsertUser('+911000000001', { name: 'Admin', role: Role.ADMIN, plan: Plan.VERIFIED, gender: 'female' });
-  await profile(admin.id, 'Gurugram', Mode.HAS_FLAT);
+  await profile(admin.id, 'female', 'Gurugram', Mode.HAS_FLAT, 0);
   await lifestyle(admin.id);
 
-  // why: demo user matches DEMO_PHONE for frictionless UX showcase
   const demoPhone = process.env.DEMO_PHONE ?? '+919999999999';
   const demo = await upsertUser(demoPhone, { name: 'Aarav Mehta', plan: Plan.VERIFIED, gender: 'male' });
-  await profile(demo.id, 'Gurugram', Mode.NEEDS_FLAT);
+  await profile(demo.id, 'male', 'Gurugram', Mode.NEEDS_FLAT, 1);
   await lifestyle(demo.id);
 
-  // why: 50 realistic users spread across the 3 cities
   const users = [];
   for (let i = 0; i < 50; i++) {
     const phone = `+9199${String(10000000 + i).padStart(8, '0')}`;
     const city = CITIES[i % CITIES.length]!;
     const u = await upsertUser(phone);
-    await profile(u.id, city, i % 2 === 0 ? Mode.HAS_FLAT : Mode.NEEDS_FLAT);
+    await profile(u.id, u.gender, city, i % 2 === 0 ? Mode.HAS_FLAT : Mode.NEEDS_FLAT, i + 2);
     await lifestyle(u.id);
     users.push(u);
   }
 
-  // why: 12 listings across cities from users with HAS_FLAT mode
   const existingListings = await prisma.listing.count();
   if (existingListings < 12) {
     const needed = 12 - existingListings;
     for (let i = 0; i < needed; i++) {
       const owner = users[i % users.length]!;
       const city = CITIES[i % CITIES.length]!;
-      await listing(owner.id, city);
+      await listing(owner.id, city, i);
+    }
+  } else {
+    const all = await prisma.listing.findMany({ select: { id: true } });
+    for (let i = 0; i < all.length; i++) {
+      await prisma.listing.update({ where: { id: all[i]!.id }, data: { photos: roomPhotos(i) } });
     }
   }
 
-  // why: 5 matches with a short chat so UI has content on first load
   const demoAndFirstFive = [demo, ...users.slice(0, 5)];
   for (let i = 1; i <= 5; i++) {
     const other = demoAndFirstFive[i]!;
     const [a, b] = [demo.id, other.id].sort();
-    // why: Match requires userA < userB per unique constraint
     const matchRec = await prisma.match.upsert({
       where: { userA_userB: { userA: a!, userB: b! } },
       update: {},
       create: { userA: a!, userB: b!, score: 70 + i * 4 },
     });
-    // why: mutual LIKE swipes so history is consistent with how matches form
     await prisma.swipe.upsert({
       where: { fromUser_toUser: { fromUser: demo.id, toUser: other.id } },
       update: {},
@@ -162,7 +194,6 @@ async function main() {
     }
   }
 
-  // why: 2 pending selfie verifications so admin page has rows to review
   for (let i = 0; i < 2; i++) {
     const u = users[i]!;
     const existing = await prisma.verification.findFirst({ where: { userId: u.id, type: VerificationType.SELFIE } });
