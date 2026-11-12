@@ -71,8 +71,11 @@ export async function postFirebaseVerify(req: Request, res: Response, next: Next
       throw Unauthorized('Invalid Firebase token');
     }
     const phone = decoded.phone_number;
-    const email = decoded.email;
+    const email = decoded.email?.toLowerCase().trim();
     const firebaseUid = decoded.uid;
+    if (email && !phone && decoded.email_verified !== true) {
+      throw Unauthorized('Google email must be verified');
+    }
     let identityKey: string;
     let seedName = (decoded.name as string | undefined) ?? 'New user';
     if (phone) {
@@ -83,6 +86,9 @@ export async function postFirebaseVerify(req: Request, res: Response, next: Next
       throw Unauthorized('Firebase token has no phone or email');
     }
     let user = await prisma.user.findUnique({ where: { phone: identityKey } });
+    if (!user && email) {
+      user = await prisma.user.findUnique({ where: { email } });
+    }
     let isNewUser = false;
     if (!user) {
       isNewUser = true;
