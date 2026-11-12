@@ -39,11 +39,16 @@ export async function logoutByToken(oldToken: string) {
   try {
     const payload = verifyRefresh(oldToken);
     const tokens = await prisma.refreshToken.findMany({ where: { userId: payload.sub, revokedAt: null } });
-    for (const t of tokens) {
-      if (await verifyHash(oldToken, t.tokenHash)) {
-        await prisma.refreshToken.update({ where: { id: t.id }, data: { revokedAt: new Date() } });
-        break;
+    for (const token of tokens) {
+      if (await verifyHash(oldToken, token.tokenHash)) {
+        await prisma.refreshToken.updateMany({
+          where: { userId: payload.sub, family: token.family, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        return;
       }
     }
+    // why: a valid but unrecognized refresh token is a replay; revoke the user's active sessions.
+    await prisma.refreshToken.updateMany({ where: { userId: payload.sub, revokedAt: null }, data: { revokedAt: new Date() } });
   } catch { /* silent */ }
 }
