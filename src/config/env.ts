@@ -5,7 +5,18 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-  FRONTEND_ORIGIN: z.string().url().default('http://localhost:3000'),
+  FRONTEND_ORIGIN: z.string().default('http://localhost:3000').transform((value) => {
+    const origins = value.split(',').map((origin) => origin.trim()).filter(Boolean);
+    return origins.map((origin) => {
+      try {
+        const parsed = new URL(origin);
+        if (parsed.origin !== origin.replace(/\/$/, '')) throw new Error();
+        return parsed.origin;
+      } catch {
+        throw new Error('FRONTEND_ORIGIN must be a comma-separated list of valid origins');
+      }
+    });
+  }),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL required'),
   DIRECT_URL: z.string().min(1, 'DIRECT_URL required'),

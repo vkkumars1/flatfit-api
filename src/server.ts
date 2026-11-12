@@ -9,7 +9,10 @@ import { attachSockets } from './sockets/index.js';
 const app = buildApp();
 const http = createServer(app);
 const io = new IOServer(http, {
-  cors: { origin: env.FRONTEND_ORIGIN, credentials: true },
+  cors: {
+    origin: env.NODE_ENV === 'production' ? env.FRONTEND_ORIGIN : [...env.FRONTEND_ORIGIN, 'http://localhost:3000'],
+    credentials: true,
+  },
 });
 attachSockets(io);
 

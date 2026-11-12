@@ -31,7 +31,10 @@ export function buildApp() {
   app.set('trust proxy', 1);
 
   app.use(helmet());
-  app.use(cors({ origin: env.FRONTEND_ORIGIN, credentials: true }));
+  const allowedOrigins = env.NODE_ENV === 'production'
+    ? env.FRONTEND_ORIGIN
+    : [...env.FRONTEND_ORIGIN, 'http://localhost:3000'];
+  app.use(cors({ origin: allowedOrigins, credentials: true }));
   app.use(cookieParser());
   app.use(pinoHttp({ logger, customProps: () => ({}), serializers: {
     req: (req: any) => ({ id: req.id, method: req.method, url: req.url }),
