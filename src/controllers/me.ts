@@ -28,9 +28,12 @@ export async function putProfile(req: Request, res: Response, next: NextFunction
   try {
     const u = (req as any).user;
     const body = req.body as any;
-    // Ownership check on every photo path.
+    // why: external http(s) URLs (seed/demo CDN images) bypass folder check.
+    // Only enforce IDOR ownership on Supabase-style upload paths (profile|selfie|listing/<userId>/...).
     for (const p of body.photos ?? []) {
-      if (!String(p).includes(`/${u.id}/`)) throw BadRequest('Photo path must be in your folder');
+      const s = String(p);
+      if (s.startsWith('http://') || s.startsWith('https://')) continue;
+      if (!s.includes(`/${u.id}/`)) throw BadRequest('Photo path must be in your folder');
     }
     const data = {
       bio: stripHtml(body.bio ?? ''),
