@@ -28,7 +28,7 @@ export const lifestyleSchema = z.object({
   diet:     z.string().min(1),
   guestsLevel: z.number().int().min(1).max(5),
   noiseLevel:  z.number().int().min(1).max(5),
-  cooking:  z.string().min(1),
+  cooking: z.union([z.boolean(), z.string().min(1)]).transform((value) => typeof value === 'boolean' ? value : !['rarely', 'never', 'no', 'false'].includes(value.trim().toLowerCase())), // why: Prisma stores cooking as a boolean while older clients send descriptive strings.
 });
 
 export const dealBreakersSchema = z.array(z.object({ key: z.string().min(1), value: z.string().min(1) })).max(20);
