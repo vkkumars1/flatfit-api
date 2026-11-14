@@ -3,7 +3,13 @@ import { PrismaClient, Plan, Role, Mode, VerificationType, VerificationStatus, S
 const prisma = new PrismaClient();
 
 const CITIES = ['Gurugram', 'Bangalore', 'Pune'];
-const FIRST = ['Aarav','Diya','Ishaan','Anaya','Vivaan','Myra','Reyansh','Aarohi','Krishna','Saanvi','Ayaan','Kiara','Kabir','Rhea','Arjun','Isha','Dev','Zoya','Rudra','Pari','Yash','Tara','Vihaan','Siya','Aarush','Meera','Shaurya','Ira','Veer','Avni','Riya','Dhruv','Kavya','Aditya','Nisha','Sahil','Priya','Rohan','Sneha','Amit','Neha','Rahul','Pooja','Karan','Aisha','Siddharth','Tanya','Nikhil','Mira','Harsh'];
+const MALE_NAMES = ['Aarav','Ishaan','Vivaan','Reyansh','Krishna','Ayaan','Kabir','Arjun','Dev','Rudra','Yash','Vihaan','Aarush','Shaurya','Veer','Dhruv','Aditya','Sahil','Rohan','Amit','Rahul','Karan','Siddharth','Nikhil','Harsh'];
+const FEMALE_NAMES = ['Diya','Anaya','Myra','Aarohi','Saanvi','Kiara','Rhea','Isha','Zoya','Pari','Tara','Siya','Meera','Ira','Avni','Riya','Kavya','Nisha','Priya','Sneha','Neha','Pooja','Aisha','Tanya','Mira'];
+const FIRST = [...MALE_NAMES, ...FEMALE_NAMES];
+function genderForName(name: string): 'male' | 'female' {
+  if (MALE_NAMES.includes(name)) return 'male';
+  return 'female';
+}
 const LAST = ['Mehta','Shah','Kapoor','Verma','Iyer','Nair','Reddy','Rao','Khanna','Malhotra','Patel','Joshi','Gupta','Bhat','Sinha','Agarwal','Singh','Chopra','Bansal','Kulkarni'];
 const OCCUPATIONS = ['Engineer','Designer','Analyst','Doctor','Teacher','PM','Founder','Writer','Consultant'];
 const LOCALITIES: Record<string, string[]> = {
@@ -55,8 +61,9 @@ function roomPhotos(seed: number, count = 2): string[] {
 }
 
 async function upsertUser(phone: string, patch: any = {}) {
-  const name = patch.name ?? `${pick(FIRST)} ${pick(LAST)}`;
-  const gender = patch.gender ?? pick(['male','female','nonbinary']);
+  const first = patch.name ? patch.name.split(' ')[0] : pick(FIRST);
+  const name = patch.name ?? `${first} ${pick(LAST)}`;
+  const gender = patch.gender ?? genderForName(first);
   const dob = patch.dob ?? iso(1998 + rand(-3, 6), rand(1, 12), rand(1, 28));
   const role: Role = patch.role ?? Role.USER;
   const plan: Plan = patch.plan ?? Plan.FREE;
